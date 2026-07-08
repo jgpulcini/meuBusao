@@ -35,8 +35,15 @@ public class MeuBusaoService {
     }
 
     public PosicaoLinhaResponseDto findLine(final int codigoLinha) {
-        PosicaoLinhaResponseDto resultado = olhoVivoClient.buscarPosicaoEmTempoReal(codigoLinha);
+        final Boolean authorization = this.authorization();
+
+        PosicaoLinhaResponseDto resultado = new PosicaoLinhaResponseDto(token, null);
+        if(authorization){
+        resultado = olhoVivoClient.buscarPosicaoEmTempoReal(codigoLinha);
         log.info(resultado.toString());
+        }else {
+        log.info("deu ruim papai");
+        }
         return resultado;
     }
 
