@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador de Ônibus - Tempo Real</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; }
+        #map { height: 100vh; width: 100vw; }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    // 1. Inicializa o mapa focado na região de São Paulo
+    const map = L.map('map').setView([-23.52, -46.52], 13);
+
+    // 2. Adiciona o visual do mapa (OpenStreetMap)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Objeto para guardar os marcadores ativos e evitar duplicações
+    const marcadores = {};
+
+    // 3. Função que recebe seu JSON e atualiza o mapa
+    function atualizarMapa(dados) {
+        // Validação básica caso o back-end envie algo vazio ou estrutura inválida
+        if (!dados || !dados.vs) return;
+
+        dados.vs.forEach(veiculo => {
+            const id = veiculo.p;
+            // Garante que as coordenadas sejam lidas como números decimais
+            const lat = parseFloat(veiculo.py);
+            const lng = parseFloat(veiculo.px);
+            const horario = new Date(veiculo.ta).toLocaleTimeString('pt-BR');
+
+            // Se o marcador já existe, apenas move ele de lugar na tela
+            if (marcadores[id]) {
+                marcadores[id].setLatLng([lat, lng]);
+                marcadores[id].setPopupContent(`<b>Veículo:</b> ${id}<br><b>Atualizado:</b> ${horario}`);
+            } else {
+                // Se não existe, cria um novo pino no mapa
+                marcadores[id] = L.marker([lat, lng])
+                    .addTo(map)
+                    .bindPopup(`<b>Veículo:</b> ${id}<br><b>Atualizado:</b> ${horario}`);
+            }
+        });
+    }
+
+    // 4. Chamada Real para a sua API Java
+    async function consumirApiJava() {
+        const urlApi = 'http://localhost:8080/api/v1/transporte/find/buslive';
+
+        try {
+            const resposta = await fetch(urlApi);
+
+            if (!resposta.ok) {
+                throw new Error(`Erro na requisição: Status ${resposta.status}`);
+            }
+
+            const dadosReais = await resposta.json();
+
+            // Envia os dados retornados pelo Java para plotar no mapa
+            atualizarMapa(dadosReais);
+            console.log("Posições atualizadas com sucesso via API Java.");
+
+        } catch (erro) {
+            console.error("Falha ao buscar dados do back-end Java:", erro);
+        }
+    }
+
+    // Primeira execução assim que abre a página
+    consumirApiJava();
+
+    // Fica consultando o seu Java (Polling) a cada 4 segundos
+    setInterval(consumirApiJava, 4000);
+
+</script>
+</body>
+</html>
