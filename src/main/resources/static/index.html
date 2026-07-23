@@ -19,43 +19,217 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-    // 1. Inicializa o mapa focado na região de São Paulo
     const map = L.map('map').setView([-23.52, -46.52], 13);
 
-    // 2. Adiciona o visual do mapa (OpenStreetMap)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // Objeto para guardar os marcadores ativos e evitar duplicações
-    const marcadores = {};
+    const estadosVeiculos = {};
+    const rotaPontos = [
+        { nome: 'inicial', latitude: -23.508331565093325, longitude: -46.521000946348735 },
+        { nome: 'ponto 1', latitude: -23.509940, longitude: -46.520523 },
+        { nome: 'ponto 2', latitude: -23.511459919788468, longitude: -46.520371528420206 },
+        { nome: 'ponto 3', latitude: -23.513444871201184, longitude: -46.51998995799395 },
+        { nome: 'ponto 4', latitude: -23.512907204498223, longitude: -46.52155341936146 },
+        { nome: 'ponto 5', latitude: -23.511587786731514, longitude: -46.522025382715114 },
+        { nome: 'ponto 6', latitude: -23.51058689704081, longitude: -46.523356463334 },
+        { nome: 'ponto 7', latitude: -23.51229444217104, longitude: -46.52457332501499 },
+        { nome: 'ponto 8', latitude: -23.512071775813286, longitude: -46.52665172131823 },
+        { nome: 'ponto 9', latitude: -23.511906285181766, longitude: -46.528575172242476 },
+        { nome: 'ponto 10', latitude: -23.510228952263766, longitude: -46.53039010108929 },
+        { nome: 'ponto 11', latitude: -23.50894372786955, longitude: -46.53059360960416 },
+        { nome: 'ponto 12', latitude: -23.509130711861506, longitude: -46.53113771079681 },
+        { nome: 'ponto 13', latitude: -23.50986704438936, longitude: -46.53099629743714 },
+        { nome: 'ponto 14', latitude: -23.512878921881274, longitude: -46.53105430622138 },
+        { nome: 'ponto 15', latitude: -23.513613855402664, longitude: -46.53178268700914 },
+        { nome: 'ponto 16', latitude: -23.51579247838002, longitude: -46.531642507345445 },
+        { nome: 'ponto 17', latitude: -23.517537423884615, longitude: -46.5315535512891 },
+        { nome: 'ponto 18', latitude: -23.520136128605618, longitude: -46.53128726134482 },
+        { nome: 'ponto 19', latitude: -23.52185320853953, longitude: -46.531212850498584 },
+        { nome: 'ponto 20', latitude: -23.523917671649045, longitude: -46.5310074278536 },
+        { nome: 'logar', latitude: -23.527060074874345, longitude: -46.53046981701503 },
+        { nome: 'ponto 22', latitude: -23.530211761737256, longitude: -46.52919615163508 },
+        { nome: 'final', latitude: -23.531142274239, longitude: -46.52990834882825 }
+    ];
+    const pontoFixo = rotaPontos.find(ponto => ponto.nome === 'logar') || {
+        latitude: -23.527060074874345,
+        longitude: -46.53046981701503
+    };
+    const raioPontoMetros = 75;
+    const velocidadeMinimaKmHora = 20;
+    const velocidadeMaximaKmHora = 40;
+    const velocidadePadraoKmHora = 30;
 
-    // 3. Função que recebe seu JSON e atualiza o mapa
+    function toRadians(graus) {
+        return (graus * Math.PI) / 180;
+    }
+
+    function calcularDistanciaEmMetros(latitudeA, longitudeA, latitudeB, longitudeB) {
+        const raioTerra = 6371000;
+        const lat1 = toRadians(latitudeA);
+        const lat2 = toRadians(latitudeB);
+        const deltaLat = toRadians(latitudeB - latitudeA);
+        const deltaLon = toRadians(longitudeB - longitudeA);
+
+        const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2)
+            + Math.cos(lat1) * Math.cos(lat2)
+            * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return raioTerra * c;
+    }
+
+    function registrarPassagemPonto(codigoOnibus, latitude, longitude) {
+        fetch('/api/v1/transporte/pontos/1/passagens', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ codigoOnibus, latitude, longitude })
+        }).catch(erro => console.error('Erro ao registrar passagem no ponto:', erro));
+    }
+
+    function encontrarPontoMaisProximo(latitude, longitude) {
+        let pontoMaisProximo = null;
+        let menorDistancia = Number.MAX_SAFE_INTEGER;
+
+        rotaPontos.forEach(ponto => {
+            const distancia = calcularDistanciaEmMetros(latitude, longitude, ponto.latitude, ponto.longitude);
+            if (distancia < menorDistancia) {
+                menorDistancia = distancia;
+                pontoMaisProximo = { ...ponto, distancia };
+            }
+        });
+
+        return pontoMaisProximo;
+    }
+
     function atualizarMapa(dados) {
-        // Validação básica caso o back-end envie algo vazio ou estrutura inválida
         if (!dados || !dados.vs) return;
+
+        const agora = performance.now();
 
         dados.vs.forEach(veiculo => {
             const id = veiculo.p;
-            // Garante que as coordenadas sejam lidas como números decimais
-            const lat = parseFloat(veiculo.py);
-            const lng = parseFloat(veiculo.px);
+            const latitude = parseFloat(veiculo.py);
+            const longitude = parseFloat(veiculo.px);
             const horario = new Date(veiculo.ta).toLocaleTimeString('pt-BR');
 
-            // Se o marcador já existe, apenas move ele de lugar na tela
-            if (marcadores[id]) {
-                marcadores[id].setLatLng([lat, lng]);
-                marcadores[id].setPopupContent(`<b>Veículo:</b> ${id}<br><b>Atualizado:</b> ${horario}`);
-            } else {
-                // Se não existe, cria um novo pino no mapa
-                marcadores[id] = L.marker([lat, lng])
+            const estado = estadosVeiculos[id] ?? {
+                marcador: null,
+                posicaoAnimada: { lat: latitude, lng: longitude },
+                destinoReal: { lat: latitude, lng: longitude },
+                ultimaReal: null,
+                ultimaTimestampReal: agora,
+                velocidadeKmHora: velocidadePadraoKmHora,
+                direcaoAtual: { lat: 0, lng: 1 },
+                distanciaAnteriorPonto: null,
+                passouPeloPonto: false,
+                ultimoPontoRota: null,
+                indicePontoAtual: 0
+            };
+
+            if (!estado.marcador) {
+                estado.marcador = L.marker([latitude, longitude])
                     .addTo(map)
                     .bindPopup(`<b>Veículo:</b> ${id}<br><b>Atualizado:</b> ${horario}`);
             }
+
+            // A Olho Vivo é a fonte de verdade.
+            // Se a API pular, o mapa também deve pular, porque isso reflete o dado real recebido.
+            const coordenadaAtual = { lat: latitude, lng: longitude };
+            const coordenadaIgualAnterior = estado.ultimaReal
+                && Math.abs(estado.ultimaReal.lat - coordenadaAtual.lat) < 0.0000001
+                && Math.abs(estado.ultimaReal.lng - coordenadaAtual.lng) < 0.0000001;
+
+            const pontoMaisProximo = encontrarPontoMaisProximo(latitude, longitude);
+            if (pontoMaisProximo && pontoMaisProximo.nome === 'logar' && pontoMaisProximo.distancia <= raioPontoMetros && estado.ultimoPontoRota !== 'logar') {
+                estado.ultimoPontoRota = 'logar';
+            }
+
+            if (pontoMaisProximo) {
+                estado.indicePontoAtual = Math.max(0, rotaPontos.findIndex(ponto => ponto.nome === pontoMaisProximo.nome));
+            }
+
+            if (!coordenadaIgualAnterior) {
+                estado.posicaoAnimada = { ...coordenadaAtual };
+                estado.destinoReal = { ...coordenadaAtual };
+                estado.marcador.setLatLng([estado.posicaoAnimada.lat, estado.posicaoAnimada.lng]);
+            }
+
+            estado.ultimaReal = { ...coordenadaAtual };
+            estado.ultimaTimestampReal = agora;
+            estado.marcador.setPopupContent(`<b>Veículo:</b> ${id}<br><b>Atualizado:</b> ${horario}`);
+            estadosVeiculos[id] = estado;
         });
     }
 
-    // 4. Chamada Real para a sua API Java
+    function animarVeiculos(timestamp) {
+        if (!window.ultimoFrameTimestamp) {
+            window.ultimoFrameTimestamp = timestamp;
+        }
+
+        const deltaMs = Math.min(160, timestamp - window.ultimoFrameTimestamp);
+        window.ultimoFrameTimestamp = timestamp;
+
+        Object.entries(estadosVeiculos).forEach(([id, estado]) => {
+            if (!estado.marcador) return;
+
+            const metrosPorSegundo = estado.velocidadeKmHora / 3.6;
+            const metrosPercorridos = metrosPorSegundo * (deltaMs / 1000);
+            const indiceAtual = Number.isInteger(estado.indicePontoAtual) ? estado.indicePontoAtual : 0;
+            const pontoAtual = rotaPontos[indiceAtual];
+            const indiceSeguinte = Math.min(indiceAtual + 1, rotaPontos.length - 1);
+            const pontoSeguinte = rotaPontos[indiceSeguinte];
+
+            if (pontoAtual && pontoSeguinte) {
+                const distanciaParaSeguinte = calcularDistanciaEmMetros(
+                    estado.posicaoAnimada.lat,
+                    estado.posicaoAnimada.lng,
+                    pontoSeguinte.latitude,
+                    pontoSeguinte.longitude
+                );
+
+                if (distanciaParaSeguinte <= metrosPercorridos) {
+                    estado.posicaoAnimada = { lat: pontoSeguinte.latitude, lng: pontoSeguinte.longitude };
+                    estado.indicePontoAtual = indiceSeguinte;
+                } else {
+                    const fator = metrosPercorridos / distanciaParaSeguinte;
+                    estado.posicaoAnimada = {
+                        lat: estado.posicaoAnimada.lat + (pontoSeguinte.latitude - estado.posicaoAnimada.lat) * fator,
+                        lng: estado.posicaoAnimada.lng + (pontoSeguinte.longitude - estado.posicaoAnimada.lng) * fator
+                    };
+                }
+            }
+
+            estado.marcador.setLatLng([estado.posicaoAnimada.lat, estado.posicaoAnimada.lng]);
+
+            const distanciaAtualPonto = calcularDistanciaEmMetros(
+                estado.posicaoAnimada.lat,
+                estado.posicaoAnimada.lng,
+                pontoFixo.latitude,
+                pontoFixo.longitude
+            );
+
+            const dentroDoPonto = distanciaAtualPonto <= raioPontoMetros;
+
+            if (estado.distanciaAnteriorPonto != null
+                && estado.distanciaAnteriorPonto <= raioPontoMetros
+                && !dentroDoPonto
+                && !estado.passouPeloPonto) {
+                registrarPassagemPonto(parseInt(id, 10), estado.posicaoAnimada.lat, estado.posicaoAnimada.lng);
+                estado.passouPeloPonto = true;
+            }
+
+            if (dentroDoPonto) {
+                estado.passouPeloPonto = false;
+            }
+
+            estado.distanciaAnteriorPonto = distanciaAtualPonto;
+        });
+
+        requestAnimationFrame(animarVeiculos);
+    }
+
     async function consumirApiJava() {
         const urlApi = '/api/v1/transporte/find/buslive';
 
@@ -67,22 +241,16 @@
             }
 
             const dadosReais = await resposta.json();
-
-            // Envia os dados retornados pelo Java para plotar no mapa
             atualizarMapa(dadosReais);
-            console.log("Posições atualizadas com sucesso via API Java.");
 
         } catch (erro) {
-            console.error("Falha ao buscar dados do back-end Java:", erro);
+            console.error('Falha ao buscar dados do back-end Java:', erro);
         }
     }
 
-    // Primeira execução assim que abre a página
     consumirApiJava();
-
-    // Fica consultando o seu Java (Polling) a cada 4 segundos
     setInterval(consumirApiJava, 4000);
-
+    requestAnimationFrame(animarVeiculos);
 </script>
 </body>
 </html>
