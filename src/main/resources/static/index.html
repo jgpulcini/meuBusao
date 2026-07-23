@@ -56,7 +56,43 @@
         latitude: -23.527060074874345,
         longitude: -46.53046981701503
     };
-    const raioPontoMetros = 75;
+    const raioPontoMetros = 200;
+
+    const polylineRota = L.polyline(
+        rotaPontos.map(ponto => [ponto.latitude, ponto.longitude]),
+        {
+            color: '#2563eb',
+            weight: 5,
+            opacity: 0.95,
+            dashArray: '8 6'
+        }
+    ).addTo(map);
+
+    rotaPontos.forEach((ponto, indice) => {
+        const marcador = L.circleMarker([ponto.latitude, ponto.longitude], {
+            radius: ponto.nome === 'logar' ? 7 : 4,
+            color: ponto.nome === 'logar' ? '#16a34a' : '#1d4ed8',
+            fillColor: ponto.nome === 'logar' ? '#16a34a' : '#60a5fa',
+            fillOpacity: 0.9,
+            weight: 2
+        }).addTo(map);
+
+        marcador.bindPopup(`<b>${ponto.nome}</b><br>Posição ${indice + 1}`);
+    });
+
+    const circuloLog = L.circle([pontoFixo.latitude, pontoFixo.longitude], {
+        radius: raioPontoMetros,
+        color: '#dc2626',
+        fillColor: '#dc2626',
+        fillOpacity: 0.16,
+        weight: 2
+    }).addTo(map);
+
+    const marcadorPontoLog = L.marker([pontoFixo.latitude, pontoFixo.longitude])
+      //  .addTo(map)
+        .bindPopup(`<b>Ponto de log</b><br>Raio: ${raioPontoMetros}m`);
+
+    map.fitBounds(polylineRota.getBounds(), { padding: [24, 24] });
     const velocidadeMinimaKmHora = 20;
     const velocidadeMaximaKmHora = 40;
     const velocidadePadraoKmHora = 30;

@@ -20,7 +20,7 @@ public class PontoOnibusService {
     private static final Logger log = LoggerFactory.getLogger(PontoOnibusService.class);
     private static final double PONTO_LATITUDE = -23.527060074874345;
     private static final double PONTO_LONGITUDE = -46.53046981701503;
-    private static final int RAIO_METROS = 75;
+    private static final int RAIO_METROS = 200;
 
     private final Map<Integer, PontoOnibusDto> pontos = new ConcurrentHashMap<>();
     private final Map<Integer, List<RegistroPassagemDto>> registros = new ConcurrentHashMap<>();

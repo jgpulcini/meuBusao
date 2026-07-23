@@ -4,6 +4,8 @@ import com.pulcini.meubusao.dto.RegistroPassagemDto;
 import com.pulcini.meubusao.service.PontoOnibusService;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
+import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -56,5 +58,24 @@ class PontoOnibusServiceTest {
         assertFalse(passagens.isEmpty());
         assertEquals(1, passagens.size());
         assertEquals(33695, passagens.get(0).codigoOnibus());
+    }
+
+    @Test
+    void devePermitirNovaPassagemAposUmMinutoMesmoDentroDoRaio() throws Exception {
+        PontoOnibusService service = new PontoOnibusService();
+
+        Field ultimaPassagemPorOnibusField = PontoOnibusService.class.getDeclaredField("ultimaPassagemPorOnibus");
+        ultimaPassagemPorOnibusField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<Integer, Instant> ultimaPassagemPorOnibus = (java.util.Map<Integer, Instant>) ultimaPassagemPorOnibusField.get(service);
+        ultimaPassagemPorOnibus.put(33695, Instant.now().minusSeconds(61));
+
+        boolean gravou = service.registrarPassagem(1, 33695, -23.527060074874345, -46.53046981701503);
+
+        List<RegistroPassagemDto> passagens = service.buscarPassagens(1);
+
+        assertTrue(gravou);
+        assertFalse(passagens.isEmpty());
+        assertEquals(1, passagens.size());
     }
 }
